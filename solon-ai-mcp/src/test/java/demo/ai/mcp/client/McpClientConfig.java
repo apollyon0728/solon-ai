@@ -9,9 +9,18 @@ import org.noear.solon.annotation.Inject;
 
 @Configuration
 public class McpClientConfig {
+
+//    @Bean
+//    public McpClientProvider clientWrapper(@Inject("${solon.ai.mcp.client.demo}") McpClientProvider client) {
+//        return client;
+//    }
+
     @Bean
-    public McpClientProvider clientWrapper(@Inject("${solon.ai.mcp.client.demo}") McpClientProvider client) {
-        return client;
+    public McpClientProvider clientWrapper() {
+        // 直接使用builder构建McpClientProvider实例，而不是从配置中注入
+        return McpClientProvider.builder()
+                .apiUrl("http://localhost:8081/sse")
+                .build();
     }
 
     @Bean

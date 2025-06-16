@@ -16,17 +16,24 @@ import java.util.UUID;
 @Slf4j
 @Controller
 public class McpSseTest {
+    /**
+     * 提供一个基于服务器发送事件（SSE）的测试接口。
+     * 该方法通过 "/test/sse1" 路径进行访问，返回一个用于推送事件的 Flux 流。
+     *
+     * @return 返回类型为 Flux<SseEvent> 的事件流，用于向客户端推送 SSE 事件
+     */
     @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
     @Mapping("/test/sse1")
     public Flux<SseEvent> sse1() {
+        // 生成唯一会话 ID，用于标识当前客户端会话
         String sessionId = UUID.randomUUID().toString();
 
-        // Send initial endpoint event
+        // 构建并返回初始事件对象，包含事件名称和带有会话 ID 的数据链接
         return Flux.just(new SseEvent()
                 .name("test")
                 .data("/message?sessionId=" + sessionId));
-
     }
+
 
     @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
     @Mapping("/test/sse2")
