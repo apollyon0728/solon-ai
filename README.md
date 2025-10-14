@@ -4,15 +4,18 @@
 Solon-AI
 </h1>
 <p align="center">
-	<strong>Java AI（智能体） 全场景应用开发框架（支持已知 AI 开发的各种能力）</strong>
+	<strong>Java AI & MCP 应用开发框架（支持已知 AI 开发的各种能力）</strong>
     <br/>
-    <strong>【基于 Solon 应用开发框架构建】</strong>
+    <strong>克制、高效、开放</strong>
 </p>
 <p align="center">
 	<a href="https://solon.noear.org/article/learn-solon-ai">https://solon.noear.org/article/learn-solon-ai</a>
 </p>
 
 <p align="center">
+    <a target="_blank" href="https://deepwiki.com/opensolon/solon-ai">
+        <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" />
+    </a>
     <a target="_blank" href="https://central.sonatype.com/search?q=org.noear%3Asolon-parent">
         <img src="https://img.shields.io/maven-central/v/org.noear/solon.svg?label=Maven%20Central" alt="Maven" />
     </a>
@@ -31,18 +34,18 @@ Solon-AI
     <a target="_blank" href="https://www.oracle.com/java/technologies/javase/jdk21-archive-downloads.html">
 		<img src="https://img.shields.io/badge/JDK-21-green.svg" alt="jdk-21" />
 	</a>
-    <a target="_blank" href="https://www.oracle.com/java/technologies/javase/jdk23-archive-downloads.html">
-		<img src="https://img.shields.io/badge/JDK-23-green.svg" alt="jdk-23" />
+    <a target="_blank" href="https://www.oracle.com/java/technologies/downloads/">
+		<img src="https://img.shields.io/badge/JDK-25-green.svg" alt="jdk-25" />
 	</a>
     <br />
-    <a target="_blank" href='https://gitee.com/noear/solon/stargazers'>
-		<img src='https://gitee.com/noear/solon/badge/star.svg' alt='gitee star'/>
+    <a target="_blank" href='https://gitee.com/opensolon/solon-ai/stargazers'>
+        <img src='https://gitee.com/opensolon/solon-ai/badge/star.svg?theme=gvp' alt='gitee star'/>
 	</a>
-    <a target="_blank" href='https://github.com/noear/solon/stargazers'>
-		<img src="https://img.shields.io/github/stars/noear/solon.svg?style=flat&logo=github" alt="github star"/>
+    <a target="_blank" href='https://github.com/opensolon/solon-ai/stargazers'>
+		<img src="https://img.shields.io/github/stars/opensolon/solon-ai.svg?style=flat&logo=github" alt="github star"/>
 	</a>
-    <a target="_blank" href='https://gitcode.com/opensolon/solon/stargazers'>
-		<img src='https://gitcode.com/opensolon/solon/star/badge.svg' alt='gitcode star'/>
+    <a target="_blank" href='https://gitcode.com/opensolon/solon-ai/stargazers'>
+		<img src='https://gitcode.com/opensolon/solon-ai/star/badge.svg' alt='gitcode star'/>
 	</a>
 </p>
 
@@ -51,13 +54,13 @@ Solon-AI
 
 ## 简介
 
-面向全场景的 Java AI 应用开发框架（支持已知 AI 开发的各种能力）。是 Solon 项目的一部分。也可嵌入到 SpringBoot2、jFinal、Vert.x 等框架中使用。
+面向全场景的 Java AI 应用开发框架（支持已知 AI 开发的各种能力）。是 Solon 项目的一部分。也可嵌入到 SpringBoot、jFinal、Vert.x 等框架中使用。
 
 其中 solon-ai(& mcp) 的嵌入示例：
 
-* https://gitee.com/opensolon/solon-ai-mcp-embedded-examples
-* https://gitcode.com/opensolon/solon-ai-mcp-embedded-examples
-* https://github.com/opensolon/solon-ai-mcp-embedded-examples
+* https://gitee.com/solonlab/solon-ai-mcp-embedded-examples
+* https://gitcode.com/solonlab/solon-ai-mcp-embedded-examples
+* https://github.com/solonlab/solon-ai-mcp-embedded-examples
 
 ## 主要接口体验示例
 
@@ -210,11 +213,10 @@ String rst = clientToolProvider.callToolAsText("getWeather", Map.of("location", 
 public class McpStdioToSseServerDemo implements ToolProvider {
     McpClientProvider stdioToolProvider = McpClientProvider.builder()
             .channel(McpChannel.STDIO) //表示使用 stdio
-            .serverParameters(ServerParameters.builder("npx")
-                    .args("-y", "@gitee/mcp-gitee@latest")
-                    .addEnvVar("GITEE_API_BASE", "https://gitee.com/api/v5")
-                    .addEnvVar("GITEE_ACCESS_TOKEN", "<your personal access token>")
-                    .build())
+            .command("npx")
+            .args("-y", "@gitee/mcp-gitee@latest")
+            .addEnvVar("GITEE_API_BASE", "https://gitee.com/api/v5")
+            .addEnvVar("GITEE_ACCESS_TOKEN", "<your personal access token>")
             .build();
 
     @Override

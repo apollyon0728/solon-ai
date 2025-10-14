@@ -102,6 +102,16 @@ public class MarkdownLoader extends AbstractOptionsDocumentLoader<MarkdownLoader
         }
 
         @Override
+        public void visit(Image image) {
+            String destination = image.getDestination();
+            if (destination != null) {
+                this.currentParagraphs.add(" ![" + Optional.ofNullable(image.getTitle()).orElse("") + "](" + destination + ") ");
+            }
+
+            super.visit(image);
+        }
+
+        @Override
         public void visit(ThematicBreak thematicBreak) {
             if (loader.options.horizontalLineAsNew) {
                 this.doneAndNew();

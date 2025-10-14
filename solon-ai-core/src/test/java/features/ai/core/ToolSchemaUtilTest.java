@@ -8,14 +8,13 @@ import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
 import org.junit.jupiter.api.Test;
 import org.noear.snack.ONode;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodFunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.annotation.Param;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Date;
 
 /**
  * @author noear 2025/4/29 created
@@ -24,7 +23,7 @@ public class ToolSchemaUtilTest {
     @Test
     public void type_case1() {
         ONode schemaNode = new ONode();
-        ToolSchemaUtil.buildToolParamNode(BigDecimal.class, "test", schemaNode);
+        ToolSchemaUtil.buildTypeSchemaNode(BigDecimal.class, "test", schemaNode);
 
         System.out.println(schemaNode);
         assert "{\"type\":\"number\",\"description\":\"test\"}"
@@ -34,7 +33,7 @@ public class ToolSchemaUtilTest {
     @Test
     public void type_case2() {
         ONode schemaNode = new ONode();
-        ToolSchemaUtil.buildToolParamNode(String[].class, "test", schemaNode);
+        ToolSchemaUtil.buildTypeSchemaNode(String[].class, "test", schemaNode);
 
         System.out.println(schemaNode);
         assert "{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"test\"}"
@@ -45,7 +44,7 @@ public class ToolSchemaUtilTest {
     @Test
     public void entity_case1() {
         ONode schemaNode = new ONode();
-        ToolSchemaUtil.buildToolParamNode(User.class, "test", schemaNode);
+        ToolSchemaUtil.buildTypeSchemaNode(User.class, "test", schemaNode);
 
         System.out.println(schemaNode);
         assert "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"用户Id\"},\"name\":{\"type\":\"string\",\"description\":\"用户名\"}},\"required\":[\"id\",\"name\"],\"description\":\"test\"}"
@@ -55,7 +54,7 @@ public class ToolSchemaUtilTest {
     @Test
     public void entity_case2() {
         ONode schemaNode = new ONode();
-        ToolSchemaUtil.buildToolParamNode(User[].class, "test", schemaNode);
+        ToolSchemaUtil.buildTypeSchemaNode(User[].class, "test", schemaNode);
 
         System.out.println(schemaNode);
         assert "{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"用户Id\"},\"name\":{\"type\":\"string\",\"description\":\"用户名\"}},\"required\":[\"id\",\"name\"]},\"description\":\"test\"}"
@@ -82,6 +81,17 @@ public class ToolSchemaUtilTest {
         JsonSchema schema = generator.generateSchema(CaseBo.class);
         JsonNode jsonNode = mapper.valueToTree(schema);
         System.out.println(jsonNode.toPrettyString());
+    }
+
+    @Test
+    public void ignoreOutputSchemaTest() {
+        assert ToolSchemaUtil.isIgnoreOutputSchema(String.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(Integer.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(int.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(Date.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(Boolean.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(boolean.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(BigDecimal.class);
     }
 
     public static class User {

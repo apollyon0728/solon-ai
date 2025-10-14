@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -95,34 +96,63 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
         }
     }
 
+    /**
+     * 批量存储文档（支持更新）
+     * */
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(0, 0);
+            }
             return;
         }
 
-        // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
+        }
+
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
+            batchSaveDo(batch);
 
-            List<PointStruct> points = batch.stream()
-                    .map(this::toPointStruct)
-                    .collect(Collectors.toList());
-
-            try {
-                config.client.upsertAsync(UpsertPoints.newBuilder()
-                        .setCollectionName(config.collectionName)
-                        .addAllPoints(points).build()).get();
-            } catch (InterruptedException | ExecutionException e) {
-                throw new IOException("Failed to insert documents from Qdrant", e);
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(++batchIndex, batchList.size());
             }
         }
     }
 
-    @Override
-    public void delete(String... ids) throws IOException {
+    private void batchSaveDo(List<Document> batch) throws IOException{
+        List<PointStruct> points = batch.stream()
+                .map(this::toPointStruct)
+                .collect(Collectors.toList());
+
         try {
-            List<PointId> pointIds = Arrays.stream(ids).map(id -> PointId.newBuilder().setUuid(id).build())
+            config.client.upsertAsync(UpsertPoints.newBuilder()
+                    .setCollectionName(config.collectionName)
+                    .addAllPoints(points).build()).get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new IOException("Failed to insert documents from Qdrant", e);
+        }
+    }
+
+    @Override
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
+        try {
+            List<PointId> pointIds = Arrays.stream(ids)
+                    .map(id -> PointId.newBuilder().setUuid(id).build())
                     .collect(Collectors.toList());
 
             config.client.deleteAsync(config.collectionName, pointIds).get();
@@ -132,7 +162,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     }
 
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         try {
             List<RetrievedPoint> points = config.client.retrieveAsync(
                     GetPoints.newBuilder().setCollectionName(config.collectionName)
@@ -173,10 +203,6 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     }
 
     private PointStruct toPointStruct(Document doc) {
-        if (doc.getId() == null) {
-            doc.id(Utils.uuid());
-        }
-
         Map<String, JsonWithInt.Value> payload = QdrantValueUtil.fromMap(doc.getMetadata());
 
         payload.put(config.contentFieldName, value(doc.getContent()));

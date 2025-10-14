@@ -16,6 +16,7 @@
 package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
@@ -86,9 +87,10 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                 String finish_reason = oChoice1.get("finish_reason").getString();
 
                 List<AssistantMessage> messageList;
-                if (oChoice1.contains("delta")) {  //object=chat.completion.chunk
+                if (resp.isStream()) {   //object=chat.completion.chunk
                     messageList = parseAssistantMessage(resp, oChoice1.get("delta"));
-                } else { //object=chat.completion
+                } else {
+                    //object=chat.completion
                     messageList = parseAssistantMessage(resp, oChoice1.get("message"));
                 }
 
@@ -96,7 +98,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                     resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
                 }
 
-                if ("stop".equals(finish_reason)) {
+                if (Utils.isNotEmpty(finish_reason)) {
                     resp.setFinished(true);
                 }
             }

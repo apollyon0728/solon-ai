@@ -15,19 +15,15 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
-import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
-import org.noear.solon.ai.chat.tool.ToolCallResultConverter;
-import org.noear.solon.ai.chat.tool.ToolCallResultJsonConverter;
 import org.noear.solon.ai.media.Text;
 import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.PathMatcher;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.wrap.MethodWrap;
@@ -55,8 +51,8 @@ public class MethodFunctionResource implements FunctionResource {
     private final Type returnType;
 
     private final String name;
+    private final String title;
     private final ResourceMapping mapping;
-    private final ToolCallResultConverter resultConverter;
     private final String mimeType;
 
     //path 分析器
@@ -79,25 +75,13 @@ public class MethodFunctionResource implements FunctionResource {
         //断言
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
 
+        this.title = mapping.title();
+
         Produces producesAnno = method.getAnnotation(Produces.class);
         if (producesAnno != null) {
             this.mimeType = producesAnno.value();
         } else {
             this.mimeType = mapping.mimeType();
-        }
-
-        if (mapping.resultConverter() == ToolCallResultConverter.class) {
-            if (ToolCallResultJsonConverter.getInstance().matched(mimeType)) {
-                resultConverter = ToolCallResultJsonConverter.getInstance();
-            } else {
-                resultConverter = null;
-            }
-        } else {
-            if (Solon.context() != null) {
-                resultConverter = Solon.context().getBeanOrNew(mapping.resultConverter());
-            } else {
-                resultConverter = ClassUtil.newInstance(mapping.resultConverter());
-            }
         }
 
         //支持path变量
@@ -122,6 +106,11 @@ public class MethodFunctionResource implements FunctionResource {
     @Override
     public String name() {
         return name;
+    }
+
+    @Override
+    public String title() {
+        return title;
     }
 
     @Override
@@ -163,13 +152,7 @@ public class MethodFunctionResource implements FunctionResource {
             String blob = Base64.getEncoder().encodeToString((byte[]) ctx.result);
             return Text.of(true, blob);
         } else {
-            String text;
-            if (resultConverter == null) {
-                text = String.valueOf(ctx.result);
-            } else {
-                text = resultConverter.convert(ctx.result, returnType);
-            }
-
+            String text = String.valueOf(ctx.result);
             return Text.of(false, text);
         }
     }

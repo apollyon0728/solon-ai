@@ -48,7 +48,7 @@ public class McpServerConfig {
         // 构建一个McpServerEndpointProvider实例，指定名称为demo2，并设置其sseEndpoint为/demo2/sse
         McpServerEndpointProvider serverEndpoint = McpServerEndpointProvider.builder()
                 .name("demo2")
-                .sseEndpoint("/demo2/sse")
+                .mcpEndpoint("/demo2/sse")
                 .build();
 
         // 为serverEndpoint实例添加一个新的MethodToolProvider实例，以扩展其功能

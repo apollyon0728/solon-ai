@@ -42,20 +42,31 @@ public @interface McpServerEndpoint {
     /**
      * 通道
      */
-    String channel() default McpChannel.SSE;
+    String channel();
+
+    /**
+     * MCP 端点
+     */
+    String mcpEndpoint() default "";
 
     /**
      * SSE 端点
+     *
+     * @deprecated 3.5
      */
-    String sseEndpoint() default "/sse";
+    @Deprecated
+    String sseEndpoint() default "";
 
     /**
      * Message 端点（默认根据 sse 端点自动构建）
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     String messageEndpoint() default "";
 
     /**
-     * 服务器SSE心跳间隔（空表示不启用）
+     * 服务器心跳间隔（空表示不启用）
      */
     String heartbeatInterval() default "30s";
 

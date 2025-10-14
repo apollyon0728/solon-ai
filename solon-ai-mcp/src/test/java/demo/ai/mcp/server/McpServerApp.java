@@ -2,7 +2,7 @@ package demo.ai.mcp.server;
 
 import org.noear.solon.Solon;
 import org.noear.solon.annotation.Import;
-import org.noear.solon.boot.http.HttpServerConfigure;
+import org.noear.solon.server.http.HttpServerConfigure;
 
 /**
  * McpServerApp类是服务器应用程序的入口点
@@ -17,6 +17,12 @@ public class McpServerApp {
      * @param args 命令行参数，用于在启动时传递给应用程序
      */
     public static void main(String[] args) {
+        if (Solon.app() != null) {
+            if (Solon.app().source() != McpServerApp.class) {
+                Solon.stopBlock();
+            }
+        }
+
         // 启动Solon应用程序，第二个参数是应用程序的配置器
         Solon.start(McpServerApp.class, args, app -> {
             // 监听HttpServerConfigure事件，以便在HTTP服务器启动前进行配置

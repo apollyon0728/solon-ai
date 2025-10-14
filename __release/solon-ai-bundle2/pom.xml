@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.noear</groupId>
         <artifactId>solon-ai-parent</artifactId>
-        <version>3.4.0-SNAPSHOT</version>
+        <version>3.6.0</version>
         <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
 
@@ -19,8 +19,6 @@
     <modules>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-mariadb</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-mysql</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-opensearch</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-pgvector</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-vectorex</module>
     </modules>
 </project>

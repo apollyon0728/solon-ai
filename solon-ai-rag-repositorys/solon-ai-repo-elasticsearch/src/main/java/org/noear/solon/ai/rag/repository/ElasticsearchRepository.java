@@ -40,6 +40,7 @@ import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.BiConsumer;
 
 /**
  * Elasticsearch 矢量存储知识库
@@ -238,7 +239,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     }
 
     /**
-     * 批量存储文档
+     * 批量存储文档（支持更新）
      * 将文档内容转换为向量并存储到ES中
      *
      * @param documents 要存储的文档列表
@@ -246,62 +247,75 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * @author 小奶奶花生米
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(0, 0);
+            }
             return;
         }
 
-        // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
-            config.embeddingModel.embed(batch);
-
-            StringBuilder buf = new StringBuilder();
-            for (Document doc : batch) {
-                insertBuild(buf, doc);
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
             }
+        }
 
-            executeBulkRequest(buf.toString());
-            refreshIndex();
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
+            config.embeddingModel.embed(batch);
+            batchSaveDo(batch);
+
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(++batchIndex, batchList.size());
+            }
         }
     }
 
+    private void batchSaveDo(List<Document> batch) throws IOException{
+        StringBuilder buf = new StringBuilder();
+        for (Document doc : batch) {
+            buf.append("{\"index\":{\"_index\":\"").append(config.indexName)
+                    .append("\",\"_id\":\"").append(doc.getId()).append("\"}}\n");
 
-    /**
-     * 将文档添加到批量索引操作中
-     */
-    private void insertBuild(StringBuilder buf, Document doc) {
-        if (doc.getId() == null) {
-            doc.id(Utils.uuid());
-        }
+            Map<String, Object> source = new HashMap<>();
+            source.put("content", doc.getContent());
+            source.put("metadata", doc.getMetadata());
+            source.put("embedding", doc.getEmbedding());
 
-        buf.append("{\"index\":{\"_index\":\"").append(config.indexName)
-                .append("\",\"_id\":\"").append(doc.getId()).append("\"}}\n");
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("content", doc.getContent());
-        source.put("metadata", doc.getMetadata());
-        source.put("embedding", doc.getEmbedding());
-
-        // 保存URL，如果存在
-        if (doc.getUrl() != null) {
-            source.put("url", doc.getUrl());
-        }
-
-        // 将metadata内部字段平铺到顶层
-        if (doc.getMetadata() != null) {
-            for (Map.Entry<String, Object> entry : doc.getMetadata().entrySet()) {
-                source.put(entry.getKey(), entry.getValue());
+            // 保存URL，如果存在
+            if (doc.getUrl() != null) {
+                source.put("url", doc.getUrl());
             }
+
+            // 将metadata内部字段平铺到顶层
+            if (doc.getMetadata() != null) {
+                for (Map.Entry<String, Object> entry : doc.getMetadata().entrySet()) {
+                    source.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            buf.append(ONode.stringify(source)).append("\n");
         }
 
-        buf.append(ONode.stringify(source)).append("\n");
+        executeBulkRequest(buf.toString());
+        refreshIndex();
     }
 
     /**
      * 删除指定ID的文档
      */
     @Override
-    public void delete(String... ids) throws IOException {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
         for (String id : ids) {
             //不支持星号删除
             Request request = new Request("DELETE", "/" + config.indexName + "/_doc/" + id);
@@ -311,7 +325,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     }
 
     @Override
-    public boolean exists(String id) {
+    public boolean existsById(String id) {
         try {
             Request request = new Request("HEAD", "/" + config.indexName + "/_doc/" + id);
             org.elasticsearch.client.Response response = config.client.getLowLevelClient().performRequest(request);

@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.function.BiConsumer;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
@@ -142,46 +142,65 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     }
 
     /**
-     * 存储文档列表
+     * 批量存储文档（支持更新）
      *
      * @param documents 待存储的文档列表
      * @throws IOException 如果存储过程中发生 IO 错误
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
-        if (documents == null || documents.isEmpty()) {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+        if (Utils.isEmpty(documents)) {
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(0, 0);
+            }
             return;
         }
 
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
+        }
+
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            PipelineBase pipeline = null;
-            try {
-                pipeline = config.client.pipelined();
-                for (Document doc : batch) {
-                    if (doc.getId() == null) {
-                        doc.id(UUID.randomUUID().toString());
-                    }
+            batchSaveDo(batch);
 
-                    String key = config.keyPrefix + doc.getId();
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(++batchIndex, batchList.size());
+            }
+        }
+    }
 
-                    // 存储为 JSON 格式，注意字段名称需要与索引定义匹配
-                    Map<String, Object> jsonDoc = new HashMap<>();
-                    jsonDoc.put("content", doc.getContent());
-                    jsonDoc.put("embedding", doc.getEmbedding());
-                    jsonDoc.put("metadata", doc.getMetadata());
-                    if (Utils.isNotEmpty(config.metadataFields)) {
-                        jsonDoc.putAll(doc.getMetadata());
-                    }
+    private void batchSaveDo(List<Document> batch) {
+        PipelineBase pipeline = null;
+        try {
+            pipeline = config.client.pipelined();
+            for (Document doc : batch) {
+                String key = config.keyPrefix + doc.getId();
 
-                    // 使用Jedis直接存储Map
-                    pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
+                // 存储为 JSON 格式，注意字段名称需要与索引定义匹配
+                Map<String, Object> jsonDoc = new HashMap<>();
+                jsonDoc.put("content", doc.getContent());
+                jsonDoc.put("embedding", doc.getEmbedding());
+                jsonDoc.put("metadata", doc.getMetadata());
+                if (Utils.isNotEmpty(config.metadataFields)) {
+                    jsonDoc.putAll(doc.getMetadata());
                 }
-                pipeline.sync();
-            } finally {
-                if (pipeline != null) {
-                    pipeline.close();
-                }
+
+                // 使用Jedis直接存储Map
+                pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
+            }
+            pipeline.sync();
+        } finally {
+            if (pipeline != null) {
+                pipeline.close();
             }
         }
     }
@@ -192,8 +211,8 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
      * @param ids 文档 ID
      */
     @Override
-    public void delete(String... ids) throws IOException {
-        if (ids == null || ids.length == 0) {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
             return;
         }
 
@@ -212,7 +231,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     }
 
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         return config.client.exists(config.keyPrefix + id);
     }
 

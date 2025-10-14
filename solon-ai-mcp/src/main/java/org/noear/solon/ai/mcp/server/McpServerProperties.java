@@ -18,7 +18,6 @@ package org.noear.solon.ai.mcp.server;
 import lombok.Getter;
 import lombok.Setter;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.annotation.BindProps;
 
 import java.time.Duration;
 
@@ -44,17 +43,37 @@ public class McpServerProperties {
     /**
      * 通道
      */
-    private String channel = McpChannel.SSE;
+    private String channel;
+
+    /**
+     * mcp 端点（路径）
+     */
+    private String mcpEndpoint;
 
     /**
      * sse 端点（路径）
+     *
+     * @deprecated 3.5
      */
-    private String sseEndpoint = "/sse";
+    @Deprecated
+    private String sseEndpoint;
 
     /**
      * message 端点（路径）
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     private String messageEndpoint;
+
+    /**
+     * 上下文路径（主要给 messageEndpoint 使用）
+     *
+     * @since 3.5
+     * @deprecated 3.5
+     */
+    @Deprecated
+    private String contextPath;
 
     /**
      * 服务器SSE心跳间隔（空表示不启用）

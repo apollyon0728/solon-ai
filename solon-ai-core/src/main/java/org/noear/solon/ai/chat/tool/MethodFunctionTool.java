@@ -20,7 +20,6 @@ import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.util.ParamDesc;
-import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
@@ -49,12 +48,12 @@ public class MethodFunctionTool implements FunctionTool {
     private final Type returnType;
 
     private final String name;
+    private final String title;
     private final String description;
     private final boolean returnDirect;
     private final List<ParamDesc> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
-    private final String mimeType;
     private String outputSchema;
 
 
@@ -71,22 +70,13 @@ public class MethodFunctionTool implements FunctionTool {
         Assert.notEmpty(mapping.description(), "ToolMapping description cannot be empty");
 
         this.name = Utils.annoAlias(mapping.name(), method.getName());
+        this.title = mapping.title();
         this.description = mapping.description();
         this.returnDirect = mapping.returnDirect();
 
-        Produces producesAnno = method.getAnnotation(Produces.class);
-        if (producesAnno != null) {
-            this.mimeType = producesAnno.value();
-        } else {
-            this.mimeType = "";
-        }
-
-        if (mapping.resultConverter() == ToolCallResultConverter.class) {
-            if (ToolCallResultJsonConverter.getInstance().matched(mimeType)) {
-                resultConverter = ToolCallResultJsonConverter.getInstance();
-            } else {
-                resultConverter = null;
-            }
+        if (mapping.resultConverter() == ToolCallResultConverter.class
+                || mapping.resultConverter() == ToolCallResultConverterDefault.class) {
+            resultConverter = ToolCallResultConverterDefault.getInstance();
         } else {
             if (Solon.context() != null) {
                 resultConverter = Solon.context().getBeanOrNew(mapping.resultConverter());
@@ -102,19 +92,16 @@ public class MethodFunctionTool implements FunctionTool {
             }
         }
 
-        inputSchema = ToolSchemaUtil.buildToolParametersNode(params, new ONode())
-                .toJson();
+        inputSchema = ToolSchemaUtil.buildInputSchema(params);
 
         // 输出参数 outputSchema
         {
             Type returnType = method.getGenericReturnType();
-            ONode outputSchemaNode = new ONode();
-            // 如果返回类型，则需要处理
-            if (returnType != void.class) {
-                ToolSchemaUtil.buildToolParamNode(returnType, "", outputSchemaNode);
+            if (ToolSchemaUtil.isIgnoreOutputSchema(returnType) == false) {
+                outputSchema = ToolSchemaUtil.buildOutputSchema(returnType);
+            } else {
+                outputSchema = "";
             }
-
-            outputSchema = outputSchemaNode.toJson();
         }
     }
 
@@ -125,6 +112,14 @@ public class MethodFunctionTool implements FunctionTool {
     @Override
     public String name() {
         return name;
+    }
+
+    /**
+     * 标题
+     */
+    @Override
+    public String title() {
+        return title;
     }
 
     /**

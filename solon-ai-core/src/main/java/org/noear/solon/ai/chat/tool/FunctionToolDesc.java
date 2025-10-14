@@ -16,13 +16,13 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ParamDesc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
 import java.util.*;
-import java.util.function.Function;
 
 /**
  * 函数工具描述（相当于构建器）
@@ -34,16 +34,19 @@ public class FunctionToolDesc implements FunctionTool {
     static final Logger log = LoggerFactory.getLogger(FunctionToolDesc.class);
 
     private final String name;
+    private String title;
+    private String description;
+
     private final List<ParamDesc> params = new ArrayList<>();
     private Type returnType;
-    private String description;
     private boolean returnDirect = false;
-    private Function<Map<String, Object>, String> doHandler;
+    private ToolHandler doHandler;
     private String inputSchema;
     private String outputSchema;
 
-    public FunctionToolDesc(String name, String description, Boolean returnDirect, String inputSchema, String outputSchema, Function<Map<String, Object>, String> handler) {
+    public FunctionToolDesc(String name, String title, String description, Boolean returnDirect, String inputSchema, String outputSchema, ToolHandler handler) {
         this.name = name;
+        this.title = title;
         this.description = description;
         this.inputSchema = inputSchema;
         this.outputSchema = outputSchema;
@@ -56,6 +59,16 @@ public class FunctionToolDesc implements FunctionTool {
      */
     public FunctionToolDesc(String name) {
         this.name = name;
+    }
+
+    /**
+     * 申明函数标题
+     *
+     * @param title 参数
+     */
+    public FunctionToolDesc title(String title) {
+        this.title = title;
+        return this;
     }
 
     /**
@@ -170,7 +183,7 @@ public class FunctionToolDesc implements FunctionTool {
      *
      * @param handler 处理器
      */
-    public FunctionToolDesc doHandle(Function<Map<String, Object>, String> handler) {
+    public FunctionToolDesc doHandle(ToolHandler handler) {
         this.doHandler = handler;
         return this;
     }
@@ -185,6 +198,13 @@ public class FunctionToolDesc implements FunctionTool {
         return name;
     }
 
+    /**
+     * 函数标题
+     */
+    @Override
+    public String title() {
+        return title;
+    }
 
     /**
      * 函数描述
@@ -208,8 +228,7 @@ public class FunctionToolDesc implements FunctionTool {
     @Override
     public String inputSchema() {
         if (inputSchema == null) {
-            inputSchema = ToolSchemaUtil.buildToolParametersNode(params, new ONode())
-                    .toJson();
+            inputSchema = ToolSchemaUtil.buildInputSchema(params);
         }
 
         return inputSchema;
@@ -219,13 +238,11 @@ public class FunctionToolDesc implements FunctionTool {
     public String outputSchema() {
         if (outputSchema == null) {
             if (returnType != null) {
-                ONode outputSchemaNode = new ONode();
-                // 如果返回类型，则需要处理
-                if (returnType != void.class) {
-                    ToolSchemaUtil.buildToolParamNode(returnType, "", outputSchemaNode);
+                if (ToolSchemaUtil.isIgnoreOutputSchema(returnType) == false) {
+                    outputSchema = ToolSchemaUtil.buildOutputSchema(returnType);
+                } else {
+                    outputSchema = "";
                 }
-
-                outputSchema = outputSchemaNode.toJson();
             }
         }
 
@@ -240,6 +257,9 @@ public class FunctionToolDesc implements FunctionTool {
         try {
             return doHandle(args);
         } catch (Throwable ex) {
+            //解包
+            ex = Utils.throwableUnwrap(ex);
+
             if (log.isWarnEnabled()) {
                 log.warn("Tool handle error, name: '{}'", name, ex);
             }
@@ -263,9 +283,9 @@ public class FunctionToolDesc implements FunctionTool {
                 }
             }
 
-            return doHandler.apply(argsNew);
+            return doHandler.handle(argsNew);
         } else {
-            return doHandler.apply(args);
+            return doHandler.handle(args);
         }
     }
 
@@ -273,6 +293,7 @@ public class FunctionToolDesc implements FunctionTool {
     public String toString() {
         return "FunctionToolDesc{" +
                 "name='" + name + '\'' +
+                ", title='" + title + '\'' +
                 ", description='" + description + '\'' +
                 ", returnDirect=" + returnDirect +
                 ", inputSchema=" + inputSchema() +

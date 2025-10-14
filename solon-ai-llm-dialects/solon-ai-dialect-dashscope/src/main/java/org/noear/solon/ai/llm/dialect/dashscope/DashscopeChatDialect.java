@@ -43,6 +43,8 @@ import java.util.Map;
 public class DashscopeChatDialect extends AbstractChatDialect {
     //https://help.aliyun.com/zh/model-studio/developer-reference
 
+    private static final String URL_PREFIX = "https://dashscope.aliyuncs.com/api/v1/services/";
+
     private static DashscopeChatDialect instance = new DashscopeChatDialect();
 
     public static DashscopeChatDialect getInstance() {
@@ -56,8 +58,13 @@ public class DashscopeChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "dashscope".equals(config.getProvider());
-
+        if ("dashscope".equals(config.getProvider())) {
+            return true;
+        } else if (config.getApiUrl().startsWith(URL_PREFIX)) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override
@@ -117,18 +124,13 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             for (ONode oChoice1 : oResp.get("output").get("choices").ary()) {
                 String finish_reason = oChoice1.get("finish_reason").getString();
 
-                List<AssistantMessage> messageList;
-                if (oChoice1.contains("delta")) {  //object=chat.completion.chunk
-                    messageList = parseAssistantMessage(resp, oChoice1.get("delta"));
-                } else { //object=chat.completion
-                    messageList = parseAssistantMessage(resp, oChoice1.get("message"));
-                }
+                List<AssistantMessage> messageList = parseAssistantMessage(resp, oChoice1.get("message"));
 
                 for (AssistantMessage msg1 : messageList) {
                     resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
                 }
 
-                if ("stop".equals(finish_reason)) {
+                if (Utils.isNotEmpty(finish_reason)) {
                     resp.setFinished(true);
                 }
 
@@ -152,19 +154,6 @@ public class DashscopeChatDialect extends AbstractChatDialect {
         }
 
         return true;
-    }
-
-    @Override
-    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
-        String content = oMessage.get("content").getString();
-        if (oMessage.get("content").isArray()) {
-            ONode contentArray = oMessage.get("content");
-            if (contentArray.ary().size() > 0) {
-                content = contentArray.get(0).get("text").getString();
-            }
-        }
-        oMessage.set("content", content);
-        return super.parseAssistantMessage(resp, oMessage);
     }
 
     @Override

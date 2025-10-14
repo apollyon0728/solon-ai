@@ -32,11 +32,13 @@ import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.vectorex.FilterTransformer;
 import org.noear.solon.ai.rag.repository.vectorex.MetadataField;
+import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.BiConsumer;
 
 /**
  * VectoRex 矢量存储知识库
@@ -85,17 +87,50 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
         }
     }
 
+    /**
+     * 批量存储文档（支持更新）
+     * */
     @Override
-    public void insert(List<Document> documents) throws IOException {
-        for (Document doc : documents) {
-            doc.id(Utils.uuid());
-            doc.embedding(config.embeddingModel.embed(doc.getContent()));
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+        if (Utils.isEmpty(documents)) {
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(0, 0);
+            }
+            return;
+        }
 
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
+        }
+
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
+            config.embeddingModel.embed(batch);
+            batchSaveDo(batch);
+
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(++batchIndex, batchList.size());
+            }
+        }
+
+
+    }
+
+    private void batchSaveDo(List<Document> batch) throws IOException{
+        for (Document doc : batch) {
             Map<String, Object> map = new HashMap<>();
             map.put(config.idFieldName, doc.getId());
             map.put(config.embeddingFieldName, doc.getEmbedding());
             map.put(config.contentFieldName, doc.getContent());
             map.put(config.metadataFieldName, doc.getMetadata());
+
             if (Utils.isNotEmpty(config.metadataFields)) {
                 for (MetadataField metadataField : config.metadataFields) {
                     map.put(metadataField.getName(), doc.getMetadata(metadataField.getName()));
@@ -116,7 +151,11 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public void delete(String... ids) throws IOException {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
         for (String id : ids) {
             CollectionDataDelReq req = new CollectionDataDelReq(config.collectionName, id);
             ServerResponse<Void> response = config.client.deleteCollectionData(req);
@@ -128,7 +167,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         QueryBuilder queryBuilder = QueryBuilder.lambda(config.collectionName);
         queryBuilder.eq(config.idFieldName, id);
         ServerResponse<List<VectorSearchResult>> response = config.client.queryCollectionData(queryBuilder);

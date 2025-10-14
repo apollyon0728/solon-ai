@@ -16,9 +16,9 @@
 | solon-ai-repo-elasticsearch  | ok | ok |    |
 | solon-ai-repo-mariadb        |    |    |    |
 | solon-ai-repo-milvus         | ok | ok |    |
-| solon-ai-repo-mysql          |    |    |    |
-| solon-ai-repo-opensearch     |    |    |    |
-| solon-ai-repo-pgvector       |    |    |    |
+| solon-ai-repo-mysql          | ok |    |    |
+| solon-ai-repo-opensearch     | ok |    |    |
+| solon-ai-repo-pgvector       | ok |    |    |
 | solon-ai-repo-qdrant         | ok | ok |    |
 | solon-ai-repo-redis          | ok | ok |    |
 | solon-ai-repo-tcvectordb     | ok | ok |    |

@@ -1,8 +1,10 @@
 package demo.ai.mcp.server;
 
+import lombok.Getter;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.annotation.Header;
@@ -16,7 +18,7 @@ import java.util.Collection;
 /**
  * @author noear 2025/4/8 created
  */
-@McpServerEndpoint(sseEndpoint = "/demo4/sse")
+@McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "/demo4/sse")
 public class McpServerTool4 {
     @ToolMapping(description = "查询城市降雨量")
     public String getRainfall(@Param(name = "location", description = "城市位置") String location) {
@@ -66,6 +68,7 @@ public class McpServerTool4 {
         return Result.succeed(activityInfo);
     }
 
+    @Getter
     public static class ActivityInfoDTO {
         @Param(description = "活动id")
         private String activityId;

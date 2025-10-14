@@ -38,7 +38,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
     protected void buildChatMessageNodeDo(ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
-        oNode.set("content", msg.getResultContent());
+        if (Utils.isNotEmpty(msg.getResultContent())) {
+            oNode.set("content", msg.getResultContent());
+        }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
             oNode.set("tool_calls", ONode.load(msg.getToolCallsRaw()));
@@ -69,7 +71,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
             oNode.set("content", msg.getContent());
         } else {
             oNode.getOrNew("content").build(n1 -> {
-                n1.addNew().set("type", "text").set("text", msg.getContent());
+                if (Utils.isNotEmpty(msg.getContent())) {
+                    n1.addNew().set("type", "text").set("text", msg.getContent());
+                }
 
                 for (AiMedia media : msg.getMedias()) {
                     if (media instanceof Image) {
@@ -167,7 +171,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
                         .set("type", "function")
                         .getOrNew("function").build(n2 -> {
                             n2.set("name", kv.getValue().nameBuilder.toString());
-                            n2.set("arguments", kv.getValue().argumentsBuilder.toString());
+                            if (kv.getValue().argumentsBuilder.length() > 0) {
+                                n2.set("arguments", kv.getValue().argumentsBuilder.toString());
+                            } else {
+                                // vllm 不能传空
+                                n2.set("arguments", "{}");
+                            }
                         });
             }
         });
@@ -227,10 +236,49 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return new ToolCall(index, callId, name, argStr, argMap);
     }
 
+    protected String parseAssistantMessageContent(ChatResponseDefault resp, ONode oContent) {
+        if (oContent.isValue()) {
+            //一般输出都是单值
+            return oContent.getRawString();
+        } else {
+            ONode contentItem = null;
+            if (oContent.isArray()) {
+                //有些输出会是列表（取第一个）
+                if (oContent.ary().size() > 0) {
+                    contentItem = oContent.get(0);
+                }
+            } else if (oContent.isObject()) {
+                //有些输出会是字典
+                contentItem = oContent;
+            }
+
+            if (contentItem != null) {
+                if (contentItem.isObject()) {
+                    //优先取文本
+                    if (contentItem.contains("text")) {
+                        return contentItem.get("text").getRawString();
+                    } else if (contentItem.contains("image")) {
+                        return contentItem.get("image").getRawString();
+                    } else if (contentItem.contains("audio")) {
+                        return contentItem.get("audio").getRawString();
+                    } else if (contentItem.contains("video")) {
+                        return contentItem.get("video").getRawString();
+                    }
+                } else if (contentItem.isValue()) {
+                    return contentItem.getRawString();
+                }
+            }
+        }
+
+        return null;
+    }
+
     public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
-        String content = oMessage.get("content").getRawString();
+        ONode oContent = oMessage.get("content");
+
+        String content = parseAssistantMessageContent(resp, oContent);
         ONode toolCallsNode = oMessage.getOrNull("tool_calls");
         ONode searchResultsNode = oMessage.getOrNull("search_results");
 
@@ -240,59 +288,93 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (Utils.isNotEmpty(toolCalls)) {
             toolCallsRaw = toolCallsNode.toObject(List.class);
+            if (resp.in_thinking && resp.isStream()) {
+                //说明是思考结束立刻调用了工具，需要添加思考的结束标识
+                messageList.add(new AssistantMessage("</think>", true));
+                messageList.add(new AssistantMessage("\n\n", false));
+            }
+            resp.in_thinking = false; //重置状态
         }
 
         if (searchResultsNode != null) {
             searchResultsRaw = searchResultsNode.toObject(List.class);
         }
 
-        if (oMessage.contains("reasoning_content")) {
-            //有思考专属内容的协议
-            String reasoning_content = oMessage.get("reasoning_content").getRawString();
+        /**
+         * 情况：
+         * 有可能一直有：reasoning_content 或 reasoning
+         * 有可能时有时无：reasoning_content 或 reasoning
+         * 有可能一直无：...
+         * 也可能和内容都为空: ...
+         * */
 
-            if (resp.isStream()) {
-                //如果是流返回（可能要拆成多条流消息）
-                if (content == null) {
-                    if (resp.reasoning == false) {
-                        //说明是第一次
-                        messageList.add(new AssistantMessage("<think>", true));
-                        messageList.add(new AssistantMessage("\n\n", true));
-                        if (Utils.isNotEmpty(reasoning_content)) {
+        if (Utils.isEmpty(toolCallsRaw) && resp.hasToolCallBuilders() == false) {
+            //如果没有工具调用（且没有工具构建）
+            String reasoning_content = oMessage.get("reasoning_content").getRawString();
+            if (reasoning_content == null) {
+                reasoning_content = oMessage.get("reasoning").getRawString();
+            }
+
+            if (Utils.isNotEmpty(reasoning_content)) {
+                resp.has_reasoning_field = true;
+                //有思考专属内容的协议
+                if (resp.isStream()) {
+                    //如果是流返回（可能要拆成多条流消息）
+                    if (Utils.isEmpty(content)) {
+                        if (resp.in_thinking == false) {
+                            //说明是第一次
+                            messageList.add(new AssistantMessage("<think>", true));
+                            messageList.add(new AssistantMessage("\n\n", true));
+                            if (Utils.isNotEmpty(reasoning_content)) {
+                                content = reasoning_content;
+                            }
+                        } else {
                             content = reasoning_content;
                         }
+
+                        resp.in_thinking = true;
                     } else {
-                        content = reasoning_content;
-                    }
+                        if (resp.in_thinking) {
+                            //说明是最后一次
+                            messageList.add(new AssistantMessage("</think>", true));
+                            messageList.add(new AssistantMessage("\n\n", false));
+                        }
 
-                    resp.reasoning = true;
-                } else {
-                    if (resp.reasoning) {
-                        //说明是最后一次
-                        messageList.add(new AssistantMessage("</think>", true));
-                        messageList.add(new AssistantMessage("\n\n", false));
+                        resp.in_thinking = false;
                     }
-
-                    resp.reasoning = false;
-                }
-            } else {
-                //如查是单次返回
-                if (Utils.isNotEmpty(reasoning_content)) {
-                    content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
-                }
-            }
-        } else if (content != null) {
-            //分析 think 状态
-            if (resp.isStream()) {
-                //如果是流返回
-                if (content.startsWith("<think>")) {
-                    resp.reasoning = true;
                 } else {
-                    if (resp.reasoning) {
-                        int thinkEnd = content.indexOf("</think>");
-                        if (thinkEnd >= 0) { //可能是个开始符
-                            resp.reasoning = false;
-                            messageList.add(new AssistantMessage(content, true));
-                            return messageList;
+                    //如查是单次返回
+                    if (Utils.isNotEmpty(reasoning_content)) {
+                        content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
+                    }
+                }
+            } else if (Utils.isNotEmpty(content)) {
+                if (resp.has_reasoning_field) { //有些情况，后面就没字段了
+                    //有推理字段的
+                    if (resp.in_thinking) {
+                        if (resp.isStream()) {
+                            //说明是最后一次
+                            messageList.add(new AssistantMessage("</think>", true));
+                            messageList.add(new AssistantMessage("\n\n", false));
+                        }
+
+                        resp.in_thinking = false;
+                    }
+                } else {
+                    //分析 think 状态（无推理字段的）
+                    if (resp.isStream()) {
+                        //如果是流返回
+                        if (content.startsWith("<think>")) {
+                            resp.in_thinking = true;
+                        } else {
+                            if (resp.in_thinking) {
+                                int thinkEnd = content.indexOf("</think>");
+                                if (thinkEnd >= 0) { //可能是个开始符
+                                    resp.in_thinking = false;
+                                    messageList.add(new AssistantMessage(content, true));
+                                    return messageList;
+                                }
+                            }
                         }
                     }
                 }
@@ -300,7 +382,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (content != null || toolCallsRaw != null) {
-            messageList.add(new AssistantMessage(content, resp.reasoning, toolCallsRaw, toolCalls, searchResultsRaw));
+            Object contentRaw = oContent.toObject();
+            messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
         }
 
         return messageList;

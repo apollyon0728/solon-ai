@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 
 /**
  * 内存存储知识库
@@ -44,17 +45,31 @@ public class InMemoryRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(0, 0);
+            }
             return;
         }
 
-        // 批量embedding
-        for (List<Document> sub : ListUtil.partition(documents, embeddingModel.batchSize())) {
-            embeddingModel.embed(sub);
-        }
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
+            embeddingModel.embed(batch);
+            batchInsertDo(batch);
 
-        for (Document doc : documents) {
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(++batchIndex, batchList.size());
+            }
+        }
+    }
+
+    private void batchInsertDo(List<Document> batch) {
+        for (Document doc : batch) {
             if (Utils.isEmpty(doc.getId())) {
                 doc.id(Utils.uuid());
             }
@@ -74,14 +89,14 @@ public class InMemoryRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public void delete(String... ids) {
+    public void deleteById(String... ids) {
         for (String id : ids) {
             store.remove(id);
         }
     }
 
     @Override
-    public boolean exists(String id) {
+    public boolean existsById(String id) {
         return store.containsKey(id);
     }
 

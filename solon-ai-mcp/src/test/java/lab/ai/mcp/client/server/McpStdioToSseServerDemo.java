@@ -15,13 +15,12 @@ import java.util.Collection;
 /**
  * 把 stdio mcp-server 转为 sse mcp-server
  */
-@McpServerEndpoint(name = "stdio-to-sse-tool")
+@McpServerEndpoint(channel = McpChannel.STREAMABLE, name = "stdio-to-sse-tool")
 public class McpStdioToSseServerDemo implements ToolProvider, ResourceProvider {
     McpClientProvider stdioToolProvider = McpClientProvider.builder()
             .channel(McpChannel.STDIO) //表示使用 stdio
-            .serverParameters(McpServerParameters.builder("java")
-                    .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")
-                    .build())
+            .command("java")
+            .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")
             .build();
 
     @Override

@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.annotation;
 
-import org.noear.solon.ai.chat.tool.ToolCallResultConverter;
-
 import java.lang.annotation.*;
 
 /**
@@ -35,12 +33,12 @@ public @interface PromptMapping {
     String name() default "";
 
     /**
+     * 标题
+     */
+    String title() default "";
+
+    /**
      * 描述
      */
     String description();
-
-    /**
-     * 结果转换器
-     */
-    Class<? extends ToolCallResultConverter> resultConverter() default ToolCallResultConverter.class;
 }

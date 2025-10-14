@@ -18,10 +18,9 @@ package org.noear.solon.ai.mcp.server;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
-import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
-import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
+import io.modelcontextprotocol.server.transport.*;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -37,16 +36,15 @@ import org.noear.solon.ai.mcp.server.prompt.PromptProvider;
 import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ConvertUtil;
 import org.noear.solon.core.util.PathUtil;
-import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Mcp 服务端点提供者
@@ -56,7 +54,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class McpServerEndpointProvider implements LifecycleBean {
     private static Logger log = LoggerFactory.getLogger(McpServerEndpointProvider.class);
-    private final McpServerTransportProvider mcpTransportProvider;
+    private final McpServerTransportProviderBase mcpTransportProvider;
     private final McpServer.SyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
 
@@ -64,8 +62,9 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final ResourceMcpServerManager resourceManager = new ResourceMcpServerManager();
     private final ToolMcpServerManager toolManager = new ToolMcpServerManager();
 
-    private final String sseEndpoint;
+    private final String mcpEndpoint;
     private final String messageEndpoint;
+
     private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
     private McpSyncServer server;
 
@@ -73,27 +72,53 @@ public class McpServerEndpointProvider implements LifecycleBean {
         this(Props.from(properties).bindTo(new McpServerProperties()));
     }
 
-    public McpServerEndpointProvider(McpServerProperties serverProperties) {
-        this.serverProperties = serverProperties;
-        this.sseEndpoint = serverProperties.getSseEndpoint();
-
-        if (Utils.isEmpty(serverProperties.getMessageEndpoint())) {
-            this.messageEndpoint = PathUtil.mergePath(this.sseEndpoint, "message");
-        } else {
-            this.messageEndpoint = serverProperties.getMessageEndpoint();
+    public McpServerEndpointProvider(McpServerProperties serverProps) {
+        if (Utils.isEmpty(serverProps.getChannel())) {
+            throw new IllegalArgumentException("The channel is required");
         }
 
-        if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
-            //stdio 通道
-            this.mcpTransportProvider = new StdioServerTransportProvider();
-        } else {
-            //sse 通道
-            this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
-                    .messageEndpoint(this.messageEndpoint)
-                    .sseEndpoint(this.sseEndpoint)
-                    .objectMapper(new ObjectMapper())
-                    .build();
+        if(serverProps.getContextPath() == null) {
+            if (Solon.app() != null) {
+                serverProps.setContextPath(Solon.cfg().serverContextPath()); //@since 2025-08-23
+            }
         }
+
+
+        this.serverProperties = serverProps;
+
+        if (McpChannel.SSE.equals(serverProps.getChannel())) {
+            //sse
+            if (Utils.isEmpty(serverProps.getSseEndpoint())) {
+                this.mcpEndpoint = serverProps.getMcpEndpoint();
+            } else {
+                this.mcpEndpoint = serverProps.getSseEndpoint();
+            }
+
+            //断言
+            Assert.notEmpty(this.mcpEndpoint, "MCP sse endpoint is empty");
+
+            if (Utils.isEmpty(serverProps.getMessageEndpoint())) {
+                this.messageEndpoint = PathUtil.joinUri(this.mcpEndpoint, "/message"); //兼容 2024 版协议风格
+            } else {
+                this.messageEndpoint = serverProps.getMessageEndpoint();
+            }
+        } else if (McpChannel.STREAMABLE.equals(serverProps.getChannel())) {
+            //streamable
+            if (Utils.isEmpty(serverProps.getMcpEndpoint())) {
+                this.mcpEndpoint = serverProps.getSseEndpoint();
+            } else {
+                this.mcpEndpoint = serverProps.getMcpEndpoint();
+            }
+
+            //断言
+            Assert.notEmpty(this.mcpEndpoint, "MCP endpoint is empty");
+
+            this.messageEndpoint = this.mcpEndpoint;
+        } else {
+            this.mcpEndpoint = null;
+            this.messageEndpoint = null;
+        }
+
 
         McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
                 .tools(true)
@@ -102,9 +127,39 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 .logging()
                 .build();
 
-        mcpServerSpec = McpServer.sync(this.mcpTransportProvider)
-                .capabilities(serverCapabilities)
-                .serverInfo(serverProperties.getName(), serverProperties.getVersion());
+        if (McpChannel.STDIO.equalsIgnoreCase(serverProps.getChannel())) {
+            //stdio 通道
+            this.mcpTransportProvider = new StdioServerTransportProvider();
+
+            mcpServerSpec = McpServer.sync((StdioServerTransportProvider) this.mcpTransportProvider)
+                    .capabilities(serverCapabilities)
+                    .serverInfo(serverProps.getName(), serverProps.getVersion());
+        } else {
+            //sse 通道
+            if (McpChannel.SSE.equals(serverProps.getChannel())) {
+                this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
+                        .sseEndpoint(this.mcpEndpoint)
+                        .messageEndpoint(this.messageEndpoint)
+                        .baseUrl(serverProps.getContextPath())
+                        .keepAliveInterval(serverProps.getHeartbeatInterval())
+                        .objectMapper(new ObjectMapper())
+                        .build();
+
+                mcpServerSpec = McpServer.sync((WebRxSseServerTransportProvider) this.mcpTransportProvider)
+                        .capabilities(serverCapabilities)
+                        .serverInfo(serverProps.getName(), serverProps.getVersion());
+            } else {
+                this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
+                        .mcpEndpoint(this.mcpEndpoint)
+                        .keepAliveInterval(serverProps.getHeartbeatInterval())
+                        .objectMapper(new ObjectMapper())
+                        .build();
+
+                mcpServerSpec = McpServer.sync((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)
+                        .capabilities(serverCapabilities)
+                        .serverInfo(serverProps.getName(), serverProps.getVersion());
+            }
+        }
     }
 
     /**
@@ -136,15 +191,18 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
-     * SSE 端点
+     * MCP 端点
      */
-    public String getSseEndpoint() {
-        return sseEndpoint;
+    public String getMcpEndpoint() {
+        return mcpEndpoint;
     }
 
     /**
      * MESSAGE 端点
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     public String getMessageEndpoint() {
         return messageEndpoint;
     }
@@ -317,36 +375,35 @@ public class McpServerEndpointProvider implements LifecycleBean {
             log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
-                    McpChannel.STDIO,
+                    serverProperties.getChannel(),
+                    toolManager.count(),
+                    resourceManager.count(),
+                    promptManager.count());
+        } else if (McpChannel.SSE.equalsIgnoreCase(serverProperties.getChannel())) {
+            log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
+                    serverProperties.getName(),
+                    serverProperties.getVersion(),
+                    serverProperties.getChannel(),
+                    this.mcpEndpoint,
+                    this.messageEndpoint,
                     toolManager.count(),
                     resourceManager.count(),
                     promptManager.count());
         } else {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
+            log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
-                    McpChannel.SSE,
-                    this.sseEndpoint,
-                    this.messageEndpoint,
+                    serverProperties.getChannel(),
+                    this.mcpEndpoint,
                     toolManager.count(),
                     resourceManager.count(),
                     promptManager.count());
         }
 
         //如果是 web 类的
-        if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
-            WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+        if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
+            IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
             tmp.toHttpHandler(Solon.app());
-
-            if (serverProperties.getHeartbeatInterval() != null
-                    && serverProperties.getHeartbeatInterval().getSeconds() > 0) {
-                //启用 sse 心跳（保持客户端不断开）
-                RunUtil.delayAndRepeat(() -> {
-                    RunUtil.runAndTry(() -> {
-                        tmp.sendHeartbeat();
-                    });
-                }, serverProperties.getHeartbeatInterval().toMillis());
-            }
         }
     }
 
@@ -354,12 +411,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 暂停（主要用于测试）
      */
     public boolean pause() {
-        if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
-            WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+        if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
+            IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
 
             //如果有注册
-            if (Utils.isNotEmpty(Solon.app().router().getBy(tmp.getSseEndpoint()))) {
-                Solon.app().router().remove(tmp.getSseEndpoint());
+            if (Utils.isNotEmpty(Solon.app().router().getBy(tmp.getMcpEndpoint()))) {
+                Solon.app().router().remove(tmp.getMcpEndpoint());
                 return true;
             }
         }
@@ -371,11 +428,11 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 恢复（主要用于测试）
      */
     public boolean resume() {
-        if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
-            WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+        if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
+            IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
 
             //如果没有注册
-            if (Utils.isEmpty(Solon.app().router().getBy(tmp.getSseEndpoint()))) {
+            if (Utils.isEmpty(Solon.app().router().getBy(tmp.getMcpEndpoint()))) {
                 tmp.toHttpHandler(Solon.app());
                 return true;
             }
@@ -405,9 +462,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
             String name = Solon.cfg().getByTmpl(endpointAnno.name());
             String version = Solon.cfg().getByTmpl(endpointAnno.version());
             String channel = Solon.cfg().getByTmpl(endpointAnno.channel());
+            String heartbeatInterval = Solon.cfg().getByTmpl(endpointAnno.heartbeatInterval());
+
+            String mcpEndpoint = Solon.cfg().getByTmpl(endpointAnno.mcpEndpoint());
+            //@deprecated  3.5 //2025-08-11
             String sseEndpoint = Solon.cfg().getByTmpl(endpointAnno.sseEndpoint());
             String messageEndpoint = Solon.cfg().getByTmpl(endpointAnno.messageEndpoint());
-            String heartbeatInterval = Solon.cfg().getByTmpl(endpointAnno.heartbeatInterval());
 
 
             if (Utils.isEmpty(name)) {
@@ -418,6 +478,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
             props.setVersion(version);
             props.setChannel(channel);
+            props.setMcpEndpoint(mcpEndpoint);
             props.setSseEndpoint(sseEndpoint);
             props.setMessageEndpoint(messageEndpoint);
             props.setEnableOutputSchema(endpointAnno.enableOutputSchema());
@@ -456,8 +517,19 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
 
         /**
-         * SSE 端点
+         * MCP 端点
          */
+        public Builder mcpEndpoint(String mcpEndpoint) {
+            props.setMcpEndpoint(mcpEndpoint);
+            return this;
+        }
+
+        /**
+         * SSE 端点
+         *
+         * @deprecated 3.5 {@link #mcpEndpoint(String)}
+         */
+        @Deprecated
         public Builder sseEndpoint(String sseEndpoint) {
             props.setSseEndpoint(sseEndpoint);
             return this;
@@ -465,9 +537,23 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
         /**
          * Message 端点
+         *
+         * @deprecated 3.5
          */
+        @Deprecated
         public Builder messageEndpoint(String messageEndpoint) {
             props.setMessageEndpoint(messageEndpoint);
+            return this;
+        }
+
+        /**
+         * 上下文路径（主要是 messageEndpoint 输出时使用）
+         *
+         * @deprecated 3.5
+         */
+        @Deprecated
+        public Builder contextPath(String contextPath) {
+            props.setContextPath(contextPath);
             return this;
         }
 

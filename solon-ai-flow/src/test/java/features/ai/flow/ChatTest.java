@@ -15,10 +15,10 @@ public class ChatTest extends HttpTester {
 
     @Test
     public void case1() {
-        FlowContext flowContext = new FlowContext();
+        FlowContext flowContext =  FlowContext.of();
         flowEngine.eval("chat_case1", flowContext);
 
-        String var2 = flowContext.get("var2");
+        String var2 = flowContext.getAs("var2");
         assert "你好".equals(var2);
     }
 

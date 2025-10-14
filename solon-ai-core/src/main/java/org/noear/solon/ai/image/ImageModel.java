@@ -19,11 +19,13 @@ import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.image.dialect.ImageDialect;
 import org.noear.solon.ai.image.dialect.ImageDialectManager;
 import org.noear.solon.core.Props;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -43,6 +45,10 @@ public class ImageModel implements AiModel {
     }
 
     public ImageModel(ImageConfig config) {
+        Assert.notNull(config, "The config is required");
+        Assert.notNull(config.getApiUrl(), "The config.apiUrl is required");
+        Assert.notNull(config.getModel(), "The config.model is required");
+
         this.dialect = ImageDialectManager.select(config);
         this.config = config;
     }
@@ -52,7 +58,14 @@ public class ImageModel implements AiModel {
      * 输入
      */
     public ImageRequestDesc prompt(String prompt) {
-        return new ImageRequestDesc(config, dialect, prompt);
+        return new ImageRequestDesc(config, dialect, prompt, null);
+    }
+
+    /**
+     * 输入（支持丰富参数形态）
+     */
+    public ImageRequestDesc prompt(ImagePrompt prompt) {
+        return new ImageRequestDesc(config, dialect, null, prompt.toMap());
     }
 
 

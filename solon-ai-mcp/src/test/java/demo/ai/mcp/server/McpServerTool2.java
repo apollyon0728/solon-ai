@@ -3,9 +3,9 @@ package demo.ai.mcp.server;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.annotation.ResourceMapping;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.media.Image;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Param;
@@ -17,9 +17,7 @@ import java.util.Collection;
 /**
  * @author noear 2025/4/8 created
  */
-@Mapping("/demo2/sse")
-@Controller
-@McpServerEndpoint(sseEndpoint = "/demo2/sse", enableOutputSchema = true)
+@McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "/demo2/sse")
 public class McpServerTool2 {
     @ToolMapping(description = "查询天气预报", returnDirect = true)
     public String getWeather(@Param(description = "城市位置") String location, Context ctx) {

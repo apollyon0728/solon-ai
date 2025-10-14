@@ -19,10 +19,7 @@ import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.common.DataType;
 import io.milvus.v2.common.IndexParam;
 import io.milvus.v2.service.collection.request.*;
-import io.milvus.v2.service.vector.request.DeleteReq;
-import io.milvus.v2.service.vector.request.GetReq;
-import io.milvus.v2.service.vector.request.InsertReq;
-import io.milvus.v2.service.vector.request.SearchReq;
+import io.milvus.v2.service.vector.request.*;
 import io.milvus.v2.service.vector.request.SearchReq.SearchReqBuilder;
 import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.SearchResp;
@@ -46,6 +43,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -149,41 +147,71 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 .build());
     }
 
+    /**
+     * 批量存储文档（支持更新）
+     * */
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(0, 0);
+            }
             return;
         }
 
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
+        }
+
         // 分块处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             // 批量embedding
             config.embeddingModel.embed(batch);
+            batchSaveDo(batch);
 
-            // 转换成json存储
-            List<JsonObject> docObjs = batch.stream().map(this::toJsonObject)
-                    .collect(Collectors.toList());
-
-            InsertReq insertReq = InsertReq.builder()
-                    .collectionName(config.collectionName)
-                    .data(docObjs)
-                    .build();
-
-            // 如果需要更新，请先移除再插入（即不支持更新）
-            config.client.insert(insertReq);
+            //回调进度
+            if (progressCallback != null) {
+                progressCallback.accept(++batchIndex, batchList.size());
+            }
         }
     }
 
+    private void batchSaveDo(List<Document> batch) throws IOException {
+        // 转换成json存储
+        List<JsonObject> docObjs = batch.stream().map(this::toJsonObject)
+                .collect(Collectors.toList());
+
+        UpsertReq upsertReq = UpsertReq.builder()
+                .collectionName(config.collectionName)
+                .data(docObjs)
+                .build();
+
+        // 如果需要更新，请先移除再插入（即不支持更新）
+        config.client.upsert(upsertReq);
+    }
+
     @Override
-    public void delete(String... ids) throws IOException {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
+        List<Object> idList = Arrays.asList(ids);
+
         config.client.delete(DeleteReq.builder()
                 .collectionName(config.collectionName)
-                .ids(Arrays.asList(ids))
+                .ids(idList)
                 .build());
     }
 
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         return config.client.get(GetReq.builder()
                 .collectionName(config.collectionName)
                 .ids(Arrays.asList(id))
@@ -221,10 +249,6 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
 
     // 文档转为 JsonObject
     private JsonObject toJsonObject(Document doc) {
-        if (doc.getId() == null) {
-            doc.id(Utils.uuid());
-        }
-
         return gson.toJsonTree(doc).getAsJsonObject();
     }
 

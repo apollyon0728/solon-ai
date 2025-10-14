@@ -208,17 +208,21 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
         if (Utils.isEmpty(type)) {
             //兼容没有 type 配置的情况
             if (Utils.isNotEmpty(serverParameters.getUrl())) {
-                type = McpChannel.SSE;
+                throw new IllegalArgumentException("The type or transport  is required");
             } else {
                 type = McpChannel.STDIO;
             }
         }
 
 
-        McpClientProvider.Builder builder = McpClientProvider.builder().channel(type);
+        McpClientProvider.Builder builder = McpClientProvider.builder();
+
+        builder.channel(type);
 
         if (McpChannel.STDIO.equalsIgnoreCase(type)) {
-            builder.serverParameters(serverParameters);
+            builder.command(serverParameters.getCommand());
+            builder.args(serverParameters.getArgs());
+            builder.env(serverParameters.getEnv());
         } else {
             builder.apiUrl(serverParameters.getUrl());
             builder.headerSet(serverParameters.getEnv());

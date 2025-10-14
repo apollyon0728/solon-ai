@@ -1,7 +1,21 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.noear.solon.ai.mcp.server;
 
 import io.modelcontextprotocol.server.McpSyncServerExchange;
-import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.handle.SessionState;
@@ -19,23 +33,32 @@ import java.util.Collection;
 public class McpServerContext extends ContextEmpty {
     /// /////////////////////////
     private final McpSyncServerExchange serverExchange;
-    private final Context context;
+    private Context context;
 
     public McpServerContext(McpSyncServerExchange serverExchange) {
         this.serverExchange = serverExchange;
-        this.context = ((WebRxSseServerTransportProvider.WebRxMcpSessionTransport) serverExchange.getSession().getTransport()).getContext();
 
-        for (KeyValues<String> kv : context.paramMap()) {
-            for (String v : kv.getValues()) {
-                this.paramMap().add(kv.getKey(), v);
-                this.headerMap().add(kv.getKey(), v);
-            }
-        }
+        //通响 transportContext 获取连接时的 context
+        this.context = (Context) serverExchange.transportContext().get(Context.class.getName());
 
-        for (KeyValues<String> kv : context.headerMap()) {
-            for (String v : kv.getValues()) {
-                this.headerMap().add(kv.getKey(), v);
+        if (this.context != null) {
+            //如果有，则是 http
+            for (KeyValues<String> kv : context.paramMap()) {
+                for (String v : kv.getValues()) {
+                    this.paramMap().add(kv.getKey(), v);
+                    this.headerMap().add(kv.getKey(), v);
+                }
             }
+
+            for (KeyValues<String> kv : context.headerMap()) {
+                for (String v : kv.getValues()) {
+                    this.headerMap().add(kv.getKey(), v);
+                }
+            }
+        } else {
+            //如果没有，则是 stdio
+            this.context = new ContextEmpty();
+            this.headerMap().addAll(System.getenv());
         }
     }
 
@@ -44,7 +67,7 @@ public class McpServerContext extends ContextEmpty {
      */
     @Override
     public String sessionId() {
-        return serverExchange.getSession().getId();
+        return serverExchange.sessionId();
     }
 
     /// ////////////////

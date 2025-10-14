@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.noear</groupId>
         <artifactId>solon-ai-parent</artifactId>
-        <version>3.4.0-SNAPSHOT</version>
+        <version>3.6.0</version>
         <relativePath>../solon-ai-parent/pom.xml</relativePath>
     </parent>
 
@@ -15,7 +15,16 @@
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
 
+    <properties>
+        <json-schema-validator.version>1.5.7</json-schema-validator.version>
+    </properties>
+
     <dependencies>
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-core</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-ai</artifactId>
@@ -28,12 +37,12 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-data</artifactId>
+            <artifactId>solon-web-rx</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-web-rx</artifactId>
+            <artifactId>solon-cache</artifactId>
         </dependency>
 
         <dependency>
@@ -42,10 +51,16 @@
             <version>${jackson.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>${json-schema-validator.version}</version>
+        </dependency>
+
 <!--        <dependency>-->
 <!--            <groupId>io.modelcontextprotocol.sdk</groupId>-->
 <!--            <artifactId>mcp</artifactId>-->
-<!--            <version>0.9.0</version>-->
+<!--            <version>0.11.0</version>-->
 <!--        </dependency>-->
 
         <dependency>
@@ -62,7 +77,13 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-web</artifactId>
+            <artifactId>solon-server-smarthttp</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-serialization-jackson</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -79,16 +100,16 @@
         </dependency>
 
         <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-test</artifactId>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>${okhttp.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <version>4.0.1</version>
-            <scope>provided</scope>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

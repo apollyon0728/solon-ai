@@ -63,6 +63,14 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         this.dialect = dialect;
         this.session = session;
         this.options = new ChatOptions();
+
+        if (Utils.isNotEmpty(config.getDefaultToolsContext())) {
+            this.options.toolsContext().putAll(config.getDefaultToolsContext());
+        }
+
+        if (Utils.isNotEmpty(config.getDefaultOptions())) {
+            this.options.options().putAll(config.getDefaultOptions());
+        }
     }
 
     /**
@@ -204,7 +212,16 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                                 if (resp.code() < 400) {
                                     parseResp(resp, subscriberProxy);
                                 } else {
-                                    subscriberProxy.onError(new HttpException("Error code:" + resp.code()));
+                                    String message = resp.bodyAsString();
+
+                                    String description;
+                                    if (Utils.isEmpty(message)) {
+                                        description = "Error code:" + resp.code();
+                                    } else {
+                                        description = "Error code:" + resp.code() + ", message:" + message;
+                                    }
+
+                                    subscriberProxy.onError(new HttpException(description));
                                 }
                             } catch (IOException e) {
                                 subscriberProxy.onError(e);
@@ -222,7 +239,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         try {
             if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
-                TextStreamUtil.parseSseStream(httpResp.body(), new SimpleSubscriber<ServerSentEvent>()
+                TextStreamUtil.parseSseStream(httpResp, new SimpleSubscriber<ServerSentEvent>()
                         .doOnSubscribe(subscriber::onSubscribe)//不要做订阅（外部不支持多次触发）
                         .doOnNext(event -> {
                             return onEventStream(resp, event, subscriber);
@@ -232,7 +249,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                         })
                         .doOnError(subscriber::onError));
             } else {
-                TextStreamUtil.parseLineStream(httpResp.body(), new SimpleSubscriber<String>()
+                TextStreamUtil.parseLineStream(httpResp, new SimpleSubscriber<String>()
                         .doOnSubscribe(subscriber::onSubscribe)
                         .doOnNext(data -> {
                             return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
@@ -248,7 +265,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void onEventEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
-        if (resp.isFinished() == false && resp.toolCallBuilders.size() > 0) {
+        if (resp.toolCallBuilders.size() > 0) {
             if (buildStreamToolMessage(resp, subscriber) == false) {
                 return;
             }
@@ -303,37 +320,42 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 }
             }
 
-            if (resp.isFinished()) {
-                if (resp.toolCallBuilders.size() > 0) {
-                    return buildStreamToolMessage(resp, subscriber);
-                }
-            }
+//            if (resp.isFinished()) {
+//                if (resp.toolCallBuilders.size() > 0) {
+//                    return buildStreamToolMessage(resp, subscriber);
+//                }
+//            }
         }
 
         return true;
     }
 
     private boolean buildStreamToolMessage(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
-        ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
+        try {
+            ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
 
-        List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
+            List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 
-        session.addMessage(assistantMessages);
+            session.addMessage(assistantMessages);
 
-        List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
+            List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
 
-        if (Utils.isEmpty(returnDirectMessages)) {
-            //没有要求直接返回
-            stream().subscribe(subscriber);
-            return false; //不触发外层的完成事件
-        } else {
-            //要求直接返回（转为新的响应消息）
-            AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
-            resp.reset();
-            resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
-            resp.aggregationMessageContent.setLength(0);
-            publishResponse(subscriber, resp, resp.lastChoice());
-            return true; //触发外层的完成事件
+            if (Utils.isEmpty(returnDirectMessages)) {
+                //没有要求直接返回
+                stream().subscribe(subscriber);
+                return false; //不触发外层的完成事件
+            } else {
+                //要求直接返回（转为新的响应消息）
+                AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
+                resp.reset();
+                resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
+                resp.aggregationMessageContent.setLength(0);
+                publishResponse(subscriber, resp, resp.lastChoice());
+                return true; //触发外层的完成事件
+            }
+        } finally {
+            //用完清掉
+            resp.toolCallBuilders.clear();
         }
     }
 

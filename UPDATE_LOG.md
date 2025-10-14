@@ -1,6 +1,118 @@
+### 可测试目标
+
+* Trae
+* Dify
+* Cherry Studio
+
+
+### 待定
+
+
+*  channel 概念改为 transport （并保持兼容）???
+
+
+### 3.6.0
+
+* 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
+
+### 3.5.5
+
+* 添加 McpClientProvider:httpFactory 默认为 jdkhttp（okhttp 有些平台不兼容），不再随 HttpUtils 的全局走
+* 添加 solon-ai-mcp McpClientProvider:httpFactory 默认为 jdkhttp（okhttp 有些平台不兼容），不再随 HttpUtils 的全局走
+
+### 3.5.3
+
+* 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
+* 调整 solon-ai-map getPrompt,readResource,callTool 取消自动异常转换（侧重原始返回）
+* 调整 solon-ai-map callTool 错误结果传递，自动添加 'Error:' （方便 llm 识别）
+* 修复 solon-ai-mcp callTool isError=true 时，不能正常与 llm 交互的问题
+* 修复 solon-ai-mcp ToolAnnotations:returnDirect 为 null 时的传递兼容性
+
+### 3.5.2
+
+* 添加 solon-ai-core ToolSchemaUtil 简化方法
+* 添加 solon-ai-mcp McpClientProperties:timeout 属性，方便简化超时配置（可省略 httpTimeout, requestTimeout, initializationTimeout）
+* 添加 solon-ai-mcp McpClientProvider:toolsChangeConsumer,resourcesChangeConsumer,resourcesUpdateConsumer,promptsChangeConsumer 配置支持
+* 添加 solon-ai-mcp McpClientProvider 缓存锁和变更刷新控制
+* 添加 solon-ai-mcp IMcpServerEndpoint 接口（方便可批量获取组件）
+* 优化 solon-ai-core RepositoryStorable 接口定义，用 save 替代 insert(标为弃用)
+* 调整 solon-ai-core FunctionToolDesc:doHandle 改用 ToolHandler 参数类型（之前为 Function），方便传递异常
+
+### 3.5.1
+
+* 新增 solon-ai-a2a 插件
+* 新增 solon-ai-core GenerateModel 接口，替代 ImageModel
+* 新增 solon-ai-core ChatModel 增加多媒体内容输出（增强感知型模型的兼容，比如输出图片或视频）
+* 新增 solon-ai-core ImageModel 增加结构体提示语输入（比如图片编辑模型）
+* 添加 solon-ai-core AbstractChatDialect 对多媒体内容输出的支持
+* 添加 solon-ai-core AssistantMessage:contentRaw 原生内容（可能是 String、Map、List、null）
+* 添加 solon-ai-dialect-dashscope 通过接口地址识别方言
+* 添加 solon-ai-mcp McpServerEndpointProvider:Builder 添加 context-path 配置
+* 优化 solon-ai-mcp McpClientProvider 配置向 McpServers json 格式上靠
+* 修复 solon-ai-core `think-> tool -> think` 时，工具调用的内容无法加入到对话的问题
+* 修复 solon-ai-mcp 服务端传输层的会话长连会超时的问题
+* 修复 solon-ai-mcp 客户端提供者心跳失效的问题
+* 修复 solon-ai-mcp SSE 传输时 message 端点未附加 context-path 的问题
+* mcp `McpSchema:*Capabilities` 添加 `@JsonIgnoreProperties(ignoreUnknown = true)` 增强跨协议版本兼容性
+
+### 3.5.0
+
+* 新增 solon-ai-mcp mcp-java-sdk v0.11.0 适配（支持 2025-03-26 版本协议）
+* 调整 solon-ai-mcp channel 取消默认值（之前为 sse），且为必填（利于协议升级过度，有明确的开发时、启动时提醒）
+  * 如果默认值仍为 sse ，升级后可能忘了修改了升级
+  * 如果默认值改为 streamable，升级后会造成不兼容
+
+### 3.4.5
+
+* 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
+* 调整 solon-ai-map getPrompt,readResource,callTool 取消自动异常转换（侧重原始返回）
+* 调整 solon-ai-map callTool 错误结果传递，自动添加 'Error:' （方便 llm 识别）
+* 修复 solon-ai-mcp callTool isError=true 时，不能正常与 llm 交互的问题
+
+### 3.4.4
+
+* 添加 solon-ai-dialect-dashscope 通过接口地址识别方言
+* 添加 solon-ai-mcp McpClientProperties:toolsChangeConsumer,resourcesChangeConsumer,resourcesUpdateConsumer,promptsChangeConsumer 配置支持
+* 添加 solon-ai-mcp McpClientProvider 缓存锁和变更刷新控制
+* 修复 solon-ai-core think-> tool -> think 时，工具调用的内容无法加入到对话的问题
+* mcp XxxCapabilities 添加 `ignoreUnknown=true` 增强旧协议兼容
+
+
+### 3.4.3
+
+* 新增 solon-ai-repo-mysql 插件
+* 添加 solon-ai-core InMemoryChatSession（语义清晰） 替代 ChatSessionDefault（标为弃用）
+* 优化 solon-ai-core ChatRequestDescDefault http 异常转换描述
+* 优化 solon-ai-core 方言的 tool_calls 消息的构建（更好的兼容 vllm）
+* 优化 solon-ai-mcp JsonSchema.additionalProperties 兼容性（兼容 bool, map）
+* 优化 solon-ai-mcp McpClientProvider 改为 McpAsyncClient（为异步需求提供支持）
+* 优化 solon-ai-mcp 初始化控制（禁用 connectOnInit），增加连接打印
+
+
+### 3.4.1
+
+* 新增 solon-ai-repo-pgvector 插件
+* 新增 solon-ai-search-baidu 插件
+* 添加 solon-ai-core `TextLoader(byte[])(SupplierEx<InputStream>)` 构造方法
+* 添加 solon-ai-core `ChatConfig:defaultToolsContext`（默认工具上下文）, `defaultOptions`（默认选项） 属性
+* 添加 solon-ai-core `RepositoryStorable:insert(list,progressCallback)` 和 `asyncInsert(list,progressCallback)` 方法，支持进度获取
+* 添加 solon-ai-mcp 客户端 ssl 定制支持
+* 优化 solon-ai 方言 think 思考内容和字段的兼容性处理
+* 优化 solon-ai 方言处理与 modelscope（魔搭社区）的兼容性
+* 优化 solon-ai 方言处理与 siliconflow（硅基流动）的兼容性
+* 优化 solon-ai 方言处理的流式节点识别兼容性
+* 优化 solon-ai 用户消息的请求构建（当内容为空时，不添加 text）
+* 优化 solon-ai-mcp McpClientProvider 心跳间隔控制（5s 以下忽略）
+* 优化 solon-ai-mcp McpServerContext 增加 stdio 代理支持（环境变量自动转为 ctx:header）
+* mcp WebRxSseClientTransport 添加 debug 日志打印
+
 
 ### 3.4.0
 
+* 新增 solon-ai-repo-opensearch 插件
+* 添加 solon-ai Options:toolsContext 方法
+* 调整 solon-ai-core ToolCallResultJsonConverter 更名为 ToolCallResultConverterDefault 并添加序列化插件支持
+* 调整 solon-ai-mcp PromptMapping，ResourceMapping 取消 resultConverter 属性（没必要）
 * 修复 solon-ai-core ChatModel:stream:doOnNext 可能无法获取 isFinished=true 情况
 
 ### 3.3.3

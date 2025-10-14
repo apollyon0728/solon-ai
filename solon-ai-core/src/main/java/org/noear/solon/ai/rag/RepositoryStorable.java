@@ -15,11 +15,14 @@
  */
 package org.noear.solon.ai.rag;
 
+import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 
 /**
  * 可存储的知识库（可存储）
@@ -30,24 +33,141 @@ import java.util.List;
 @Preview("3.1")
 public interface RepositoryStorable extends Repository {
     /**
-     * 插入
+     * 异步保存文档
+     *
+     * @param documents        文档集
+     * @param progressCallback 进度回调
+     * @since 3.5
      */
-    void insert(List<Document> documents) throws IOException;
+    default CompletableFuture<Void> asyncSave(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
 
-    /**
-     * 插入
-     */
-    default void insert(Document... documents) throws IOException {
-        insert(Arrays.asList(documents));
+        RunUtil.async(() -> {
+            try {
+                save(documents, progressCallback);
+                future.complete(null);
+            } catch (Exception ex) {
+                future.completeExceptionally(ex);
+            }
+        });
+
+        return future;
     }
 
     /**
-     * 删除
+     * 保存文档
+     *
+     * @param documents        文档集
+     * @param progressCallback 进度回调
+     * @since 3.5
      */
-    void delete(String... ids) throws IOException;
+    void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException;
+
 
     /**
-     * 是否存在
+     * 保存文档
+     *
+     * @param documents 文档集
+     * @since 3.5
      */
-    boolean exists(String id) throws IOException;
+    default void save(List<Document> documents) throws IOException {
+        save(documents, null);
+    }
+
+    /**
+     * 保存文档
+     *
+     * @param documents 文档集
+     * @since 3.5
+     */
+    default void save(Document... documents) throws IOException {
+        save(Arrays.asList(documents));
+    }
+
+    /**
+     * 删除文档
+     *
+     * @param ids 文档IDs
+     * @since 3.5
+     */
+    void deleteById(String... ids) throws IOException;
+
+    /**
+     * 是否存在文档
+     *
+     * @param id 文档ID
+     * @since 3.5
+     */
+    boolean existsById(String id) throws IOException;
+
+    //========
+
+    /**
+     * 异步插件
+     *
+     * @param documents        文档集
+     * @param progressCallback 进度回调
+     * @deprecated 3.5 {@link #asyncSave(List, BiConsumer)}
+     */
+    @Deprecated
+    default CompletableFuture<Void> asyncInsert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) {
+        return asyncSave(documents, progressCallback);
+    }
+
+    /**
+     * 插入
+     *
+     * @param documents        文档集
+     * @param progressCallback 进度回调
+     * @deprecated 3.5 {@link #save(List, BiConsumer)}
+     */
+    @Deprecated
+    default void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+        save(documents, progressCallback);
+    }
+
+
+    /**
+     * 插入
+     *
+     * @param documents 文档集
+     * @deprecated 3.5 {@link #save(List)}
+     */
+    @Deprecated
+    default void insert(List<Document> documents) throws IOException {
+        save(documents);
+    }
+
+    /**
+     * 插入
+     *
+     * @param documents 文档集
+     * @deprecated 3.5 {@link #save(Document...)}
+     */
+    @Deprecated
+    default void insert(Document... documents) throws IOException {
+        save(documents);
+    }
+
+    /**
+     * 删除文档
+     *
+     * @param ids 文档IDs
+     * @deprecated 3.5 {@link #deleteById(String...)}
+     */
+    @Deprecated
+    default void delete(String... ids) throws IOException {
+        deleteById(ids);
+    }
+
+    /**
+     * 是否存在文档
+     *
+     * @param id 文档ID
+     * @deprecated 3.5 {@link #existsById(String)}
+     */
+    @Deprecated
+    default boolean exists(String id) throws IOException {
+        return existsById(id);
+    }
 }

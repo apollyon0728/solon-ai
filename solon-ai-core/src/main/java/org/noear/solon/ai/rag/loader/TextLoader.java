@@ -15,11 +15,15 @@
  */
 package org.noear.solon.ai.rag.loader;
 
+import org.noear.solon.Solon;
 import org.noear.solon.ai.rag.Document;
-import org.noear.solon.core.util.ResourceUtil;
+import org.noear.solon.core.util.IoUtil;
+import org.noear.solon.core.util.SupplierEx;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.util.Arrays;
@@ -31,8 +35,8 @@ import java.util.List;
  * @author noear
  * @since 3.1
  */
-public class TextLoader extends AbstractDocumentLoader {
-    private final URL url;
+public class TextLoader extends AbstractOptionsDocumentLoader<TextLoader.Options, TextLoader> {
+    private final SupplierEx<InputStream> source;
 
     public TextLoader(File file) throws IOException {
         this(file.toURI());
@@ -43,16 +47,40 @@ public class TextLoader extends AbstractDocumentLoader {
     }
 
     public TextLoader(URL url) {
-        this.url = url;
+        this(() -> url.openStream());
+    }
+
+    /**
+     * @since 3.4
+     */
+    public TextLoader(byte[] bytes) {
+        this(() -> new ByteArrayInputStream(bytes));
+    }
+
+    /**
+     * @since 3.4
+     */
+    public TextLoader(SupplierEx<InputStream> source) {
+        this.source = source;
+        this.options = new Options();
     }
 
     @Override
     public List<Document> load() {
-        try {
-            String temp = ResourceUtil.getResourceAsString(url);
+        try (InputStream stream = source.get()) {
+            String temp = IoUtil.transferToString(stream, options.charset);
             return Arrays.asList(new Document(temp).metadata(additionalMetadata));
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static class Options {
+        private String charset = Solon.encoding();
+
+        public Options charset(String charset) {
+            this.charset = charset;
+            return this;
         }
     }
 }

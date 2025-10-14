@@ -76,6 +76,13 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     /**
+     * 是否有工具构建器
+     */
+    public boolean hasToolCallBuilders() {
+        return Utils.isNotEmpty(toolCallBuilders);
+    }
+
+    /**
      * 获取所有选择
      */
     @Override
@@ -132,6 +139,26 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     /**
+     * 是否有消息内容
+     */
+    @Override
+    public boolean hasContent() {
+        return getContent() != null;
+    }
+
+    /**
+     * 获取消息内容
+     */
+    @Override
+    public String getContent() {
+        if (hasChoices()) {
+            return lastChoice().getMessage().getContent();
+        } else {
+            return null;
+        }
+    }
+
+    /**
      * 获取使用情况（完成时，才会有使用情况）
      */
     @Override
@@ -158,9 +185,14 @@ public class ChatResponseDefault implements ChatResponse {
     /// //////////////////////////
 
     /**
-     * 思考中
+     * 在思考中
      */
-    public boolean reasoning;
+    public boolean in_thinking;
+
+    /**
+     * 有推理字段
+     */
+    public boolean has_reasoning_field;
 
     /**
      * 重置响应数据
